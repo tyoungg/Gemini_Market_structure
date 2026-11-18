@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import StandardScaler
 import scipy.special
 import yfinance as yf
 from datetime import datetime, timedelta
@@ -19,25 +20,26 @@ st.set_page_config(
 # Apply visual styling
 sns.set_theme(style="whitegrid")
 
+# Sidebar Top Header & Mode Switcher
+st.sidebar.title("🌐 Operating Mode")
+app_mode = st.sidebar.radio(
+    "Select Interface Mode:",
+    [
+        "🧪 Theoretical Simulation Engine",
+        "📊 Empirical Real-Data Laboratory",
+        "📁 Custom CSV Data Ingestion"
+    ]
+)
+
+st.sidebar.markdown("---")
+
 # Title and header
 st.title("📈 The Rational Coward — Interactive Market Structure Lab")
 st.markdown("""
 *Based on **The Rational Coward Research Program** & **Further Research Addendum** (Nov 2026).*  
 This application bridges **theoretical agent-based simulation** with **empirical real-market data testing** (via `yfinance` & custom uploads).
 """)
-
-# Sidebar Navigation - Primary Operating Mode Selector
-st.sidebar.header("🌐 Operating Mode")
-app_mode = st.sidebar.radio(
-    "Choose Mode:",
-    [
-        "🧪 Theoretical Simulation Engine", 
-        "📊 Empirical Real-Data Laboratory", 
-        "📁 Custom CSV Data Ingestion"
-    ]
-)
-
-st.sidebar.markdown("---")
+st.markdown("---")
 
 # ==============================================================================
 # MODE 1: THEORETICAL SIMULATION ENGINE
@@ -224,18 +226,43 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
     st.sidebar.header("🔍 Real-Data Event Study Settings")
     
     preset_events = {
-        "Tesla (TSLA) — S&P 500 Inclusion (Dec 2020)": {"ticker": "TSLA", "date": "2020-12-21", "peers": ["F", "GM", "TM", "RACE", "HMC", "STLA"]},
-        "Palantir (PLTR) — S&P 500 Inclusion (Sep 2024)": {"ticker": "PLTR", "date": "2024-09-23", "peers": ["SNOW", "PATH", "DDOG", "AI", "C AI", "MDB"]},
-        "Super Micro (SMCI) — S&P 500 Inclusion (Mar 2024)": {"ticker": "SMCI", "date": "2024-03-18", "peers": ["DELL", "HPE", "NVDA", "WDC", "STX"]},
-        "Deckers Outdoor (DECK) — S&P 500 Inclusion (Mar 2024)": {"ticker": "DECK", "date": "2024-03-18", "peers": ["NKE", "CROX", "SKX", "UAA", "WWW"]},
-        "Custom Event Entry": {"ticker": "CUSTOM", "date": "", "peers": []}
+        "Tesla (TSLA) — S&P 500 Inclusion (Dec 2020)": {
+            "ticker": "TSLA",
+            "date": "2020-12-21",
+            "peers": ["F", "GM", "TM", "RACE", "HMC", "STLA"]
+        },
+        "Palantir (PLTR) — S&P 500 Inclusion (Sep 2024)": {
+            "ticker": "PLTR",
+            "date": "2024-09-23",
+            "peers": ["SNOW", "PATH", "DDOG", "AI", "MDB", "NET"]
+        },
+        "Super Micro (SMCI) — S&P 500 Inclusion (Mar 2024)": {
+            "ticker": "SMCI",
+            "date": "2024-03-18",
+            "peers": ["DELL", "HPE", "NVDA", "WDC", "STX"]
+        },
+        "Deckers Outdoor (DECK) — S&P 500 Inclusion (Mar 2024)": {
+            "ticker": "DECK",
+            "date": "2024-03-18",
+            "peers": ["NKE", "CROX", "SKX", "UAA", "WWW", "ONON"]
+        },
+        "Kroger (KR) — Grocery / Retail Peer Study": {
+            "ticker": "KR",
+            "date": "2023-09-15",
+            "peers": ["WMT", "TGT", "COST", "ACI", "DG", "DLTR"]
+        },
+        "Custom Event Entry": {
+            "ticker": "CUSTOM",
+            "date": "",
+            "peers": []
+        }
     }
 
     event_choice = st.sidebar.selectbox("Select Historical Inclusion Event:", list(preset_events.keys()))
 
     if event_choice == "Custom Event Entry":
-        target_ticker = st.sidebar.text_input("Target Ticker Symbol:", "TSLA").upper()
-        event_date_str = st.sidebar.text_input("Inclusion Date (YYYY-MM-DD):", "2020-12-21")
+        target_ticker = st.sidebar.text_input("Target Ticker Symbol:", "TSLA").strip().upper()
+        event_date_str = st.sidebar.text_input("Inclusion Date (YYYY-MM-DD):", "2020-12-21").strip()
         peer_tickers_str = st.sidebar.text_input("Candidate Peer Tickers (comma separated):", "F, GM, TM, RACE, HMC")
         peer_list = [p.strip().upper() for p in peer_tickers_str.split(",") if p.strip()]
     else:
@@ -246,100 +273,151 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
 
     st.sidebar.subheader("Matching & Event Window")
     k_neighbors = st.sidebar.slider("K Twin Matches", 1, 5, 3)
-    pre_days = st.sidebar.slider("Pre-Event Days", 5, 30, 15)
-    post_days = st.sidebar.slider("Post-Event Days", 5, 45, 30)
+    pre_days = st.sidebar.slider("Pre-Event Trading Days", 5, 30, 15)
+    post_days = st.sidebar.slider("Post-Event Trading Days", 5, 45, 30)
 
-    run_fetch = st.button("🚀 Fetch Real Market Data & Compute Green Score")
+    run_fetch = st.sidebar.button("🚀 Run Real-Data Analysis", type="primary")
 
     if run_fetch or event_choice != "Custom Event Entry":
         try:
             event_dt = datetime.strptime(event_date_str, "%Y-%m-%d")
-            start_dt = event_dt - timedelta(days=pre_days + 15)
-            end_dt = event_dt + timedelta(days=post_days + 15)
+            # Pull enough calendar padding to guarantee required trading days
+            start_dt = event_dt - timedelta(days=pre_days * 2 + 20)
+            end_dt = event_dt + timedelta(days=post_days * 2 + 20)
 
-            st.info(f"Fetching market data for **{target_ticker}** and candidate peers ({', '.join(peer_list)}) from `{start_dt.strftime('%Y-%m-%d')}` to `{end_dt.strftime('%Y-%m-%d')}`...")
+            tickers_to_pull = list(set([target_ticker] + peer_list))
+            
+            with st.spinner(f"Fetching market data for {target_ticker} and peers ({', '.join(peer_list)}) via yfinance..."):
+                raw_data = yf.download(tickers_to_pull, start=start_dt.strftime('%Y-%m-%d'), end=end_dt.strftime('%Y-%m-%d'), progress=False)
 
-            tickers_to_pull = [target_ticker] + peer_list
-            raw_data = yf.download(tickers_to_pull, start=start_dt.strftime('%Y-%m-%d'), end=end_dt.strftime('%Y-%m-%d'), progress=False)
-
-            if isinstance(raw_data.columns, pd.MultiIndex):
-                prices = raw_data['Adj Close'] if 'Adj Close' in raw_data.columns else raw_data['Close']
+            if raw_data.empty:
+                st.error("yfinance returned an empty dataset. Please verify ticker symbols and internet connectivity.")
             else:
-                prices = raw_data
+                # Handle MultiIndex structure from yfinance download
+                if isinstance(raw_data.columns, pd.MultiIndex):
+                    if 'Adj Close' in raw_data.columns.levels[0]:
+                        prices = raw_data['Adj Close'].copy()
+                    elif 'Close' in raw_data.columns.levels[0]:
+                        prices = raw_data['Close'].copy()
+                    else:
+                        prices = raw_data.xs(raw_data.columns.levels[0][0], axis=1, level=0).copy()
+                else:
+                    prices = raw_data.copy()
 
-            if target_ticker in prices.columns:
-                target_prices = prices[target_ticker].dropna()
-                peer_prices = prices[[c for c in peer_list if c in prices.columns]].dropna(axis=1)
+                # Clean missing price values safely (ffill then bfill)
+                prices = prices.dropna(how='all', axis=1).ffill().bfill()
 
-                st.success(f"Successfully retrieved price histories for {target_ticker} and {len(peer_prices.columns)} peer stocks!")
+                if target_ticker not in prices.columns:
+                    st.error(f"Target ticker `{target_ticker}` could not be retrieved from yfinance. Available tickers: {list(prices.columns)}")
+                else:
+                    target_prices = prices[target_ticker].dropna()
+                    valid_peers = [c for c in peer_list if c in prices.columns and c != target_ticker]
 
-                # Calculate Returns around event window
-                all_returns = prices.pct_change().dropna()
-                
-                # KNN Matching on pre-event volatility and volume if available
-                volatilities = all_returns.std() * np.sqrt(252)
-                means = all_returns.mean() * 252
-                
-                metrics_df = pd.DataFrame({
-                    "Annualized_Vol": volatilities,
-                    "Mean_Return": means
-                }).dropna()
+                    if len(valid_peers) == 0:
+                        st.warning("No valid candidate peer tickers were retrieved to form a twin portfolio.")
+                    else:
+                        st.success(f"Retrieved market price series for **{target_ticker}** and **{len(valid_peers)}** peer candidates ({', '.join(valid_peers)}).")
 
-                if target_ticker in metrics_df.index:
-                    target_vec = metrics_df.loc[[target_ticker]][["Annualized_Vol", "Mean_Return"]].values
-                    peer_metrics = metrics_df.drop(index=[target_ticker])
-                    
-                    if len(peer_metrics) > 0:
-                        knn = NearestNeighbors(n_neighbors=min(k_neighbors, len(peer_metrics)))
-                        knn.fit(peer_metrics[["Annualized_Vol", "Mean_Return"]].values)
-                        dist, idxs = knn.kneighbors(target_vec)
+                        # --- Fundamental + Statistical Feature Extraction for KNN ---
+                        # Fetch fundamental metrics (Market Cap, P/E ratio, Volatility, Beta) for robust matching
+                        feature_data = []
+                        all_returns = prices.pct_change().dropna()
+
+                        for t in [target_ticker] + valid_peers:
+                            vol = all_returns[t].std() * np.sqrt(252) if t in all_returns.columns else 0.30
+                            ret_mean = all_returns[t].mean() * 252 if t in all_returns.columns else 0.05
+                            
+                            # Fetch fundamentals via yfinance Ticker info (fallback to estimates if info key is missing)
+                            mcap = 1e10
+                            pe = 20.0
+                            try:
+                                info = yf.Ticker(t).info
+                                mcap = info.get('marketCap', info.get('enterpriseValue', 1e10))
+                                pe = info.get('trailingPE', info.get('forwardPE', 20.0))
+                                if pe is None or pe <= 0:
+                                    pe = 20.0
+                            except Exception:
+                                pass
+
+                            feature_data.append({
+                                "Ticker": t,
+                                "Log_MarketCap": np.log(max(mcap, 1e6)),
+                                "PE_Ratio": pe,
+                                "Annualized_Vol": vol,
+                                "Mean_Return": ret_mean
+                            })
+
+                        metrics_df = pd.DataFrame(feature_data).set_index("Ticker")
                         
-                        twin_tickers = peer_metrics.iloc[idxs[0]].index.tolist()
-                        st.subheader(f"Matched Fundamental Twin Portfolio (K={len(twin_tickers)})")
-                        st.write(f"Matched Twins: **{', '.join(twin_tickers)}**")
-                        st.dataframe(peer_metrics.iloc[idxs[0]])
+                        target_feat = metrics_df.loc[[target_ticker]]
+                        peer_feats = metrics_df.drop(index=[target_ticker])
 
-                        # Cumulative Returns Calculation around event date
-                        idx_dt = target_prices.index.get_indexer([event_dt], method='nearest')[0]
-                        start_idx = max(0, idx_dt - pre_days)
-                        end_idx = min(len(target_prices), idx_dt + post_days + 1)
+                        # Normalize features using StandardScaler for true fundamental KNN distance matching
+                        scaler = StandardScaler()
+                        peer_scaled = scaler.fit_transform(peer_feats)
+                        target_scaled = scaler.transform(target_feat)
+
+                        n_k = min(k_neighbors, len(peer_feats))
+                        knn = NearestNeighbors(n_neighbors=n_k)
+                        knn.fit(peer_scaled)
+                        distances, indices = knn.kneighbors(target_scaled)
+
+                        twin_tickers = peer_feats.iloc[indices[0]].index.tolist()
+
+                        st.subheader(f"🤝 Fundamental KNN Matched Twin Portfolio (K={len(twin_tickers)})")
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            st.markdown(**Target Included Stock Fundamentals:**)
+                            st.dataframe(metrics_df.loc[[target_ticker]], use_container_width=True)
+                        with col_b:
+                            st.markdown(**Matched Counterfactual Twin Stocks:**)
+                            st.dataframe(peer_feats.loc[twin_tickers], use_container_width=True)
+
+                        # --- Event Window Index Alignment ---
+                        # Identify nearest trading day to specified inclusion date
+                        target_dates = target_prices.index
+                        nearest_idx_pos = target_dates.get_indexer([event_dt], method='nearest')[0]
                         
-                        window_dates = target_prices.index[start_idx:end_idx]
-                        rel_days = np.arange(start_idx - idx_dt, end_idx - idx_dt)
+                        start_pos = max(0, nearest_idx_pos - pre_days)
+                        end_pos = min(len(target_prices), nearest_idx_pos + post_days + 1)
 
-                        target_window = target_prices.iloc[start_idx:end_idx]
+                        target_window = target_prices.iloc[start_pos:end_pos]
+                        rel_days = np.arange(start_pos - nearest_idx_pos, end_pos - nearest_idx_pos)
+
+                        # Compute percentage cumulative returns indexed to start of event window
                         target_norm = (target_window / target_window.iloc[0] - 1.0) * 100.0
 
-                        twin_window = peer_prices[twin_tickers].iloc[start_idx:end_idx]
-                        twin_avg_window = twin_window.mean(axis=1)
+                        twin_prices_window = prices[twin_tickers].iloc[start_pos:end_pos]
+                        twin_avg_window = twin_prices_window.mean(axis=1)
                         twin_norm = (twin_avg_window / twin_avg_window.iloc[0] - 1.0) * 100.0
 
-                        green_score_series = target_norm - twin_norm
+                        # Green Score = Target CAR - Twin CAR
+                        green_score = target_norm - twin_norm
 
+                        # --- Event Study Visualization ---
                         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
-                        
-                        ax1.plot(rel_days, target_norm.values, label=f"Included Stock ({target_ticker})", color="darkgreen", lw=2.5)
-                        ax1.plot(rel_days, twin_norm.values, label=f"KNN Twin Portfolio ({', '.join(twin_tickers)})", color="gray", linestyle="--", lw=2)
-                        ax1.axvline(0, color="red", linestyle=":", lw=1.5, label="Inclusion Event (t=0)")
-                        ax1.set_title(f"Real Market Event Study: {target_ticker} Index Inclusion ({event_date_str})")
-                        ax1.set_ylabel("Cumulative Return (%)")
-                        ax1.legend()
 
-                        ax2.fill_between(rel_days, green_score_series.values, 0, where=(green_score_series.values >= 0), color="green", alpha=0.3, label="Positive Green Score (Inclusion Premium)")
-                        ax2.fill_between(rel_days, green_score_series.values, 0, where=(green_score_series.values < 0), color="red", alpha=0.3, label="Negative Green Score")
-                        ax2.plot(rel_days, green_score_series.values, color="darkgreen", lw=1.5)
-                        ax2.axvline(0, color="red", linestyle=":", lw=1.5)
-                        ax2.set_title("Empirical Green Score (Abnormal Price Distortion = Target CAR - Twin CAR)")
-                        ax2.set_xlabel("Trading Days Relative to Inclusion (t=0)")
+                        ax1.plot(rel_days, target_norm.values, label=f"Target Stock ({target_ticker})", color="darkgreen", lw=2.5)
+                        ax1.plot(rel_days, twin_norm.values, label=f"KNN Twin Portfolio ({', '.join(twin_tickers)})", color="gray", linestyle="--", lw=2)
+                        ax1.axvline(0, color="crimson", linestyle=":", lw=1.5, label="Inclusion Date (t=0)")
+                        ax1.set_title(f"Real Market Event Study: {target_ticker} Index Event ({event_date_str})")
+                        ax1.set_ylabel("Cumulative Return (%)")
+                        ax1.legend(loc="upper left")
+
+                        ax2.fill_between(rel_days, green_score.values, 0, where=(green_score.values >= 0), color="green", alpha=0.3, label="Positive Green Score (Inclusion Premium)")
+                        ax2.fill_between(rel_days, green_score.values, 0, where=(green_score.values < 0), color="red", alpha=0.3, label="Negative Green Score")
+                        ax2.plot(rel_days, green_score.values, color="darkgreen", lw=1.5)
+                        ax2.axvline(0, color="crimson", linestyle=":", lw=1.5)
+                        ax2.set_title("Empirical Green Score (Abnormal Demand Distortion = Target CAR - Twin CAR)")
+                        ax2.set_xlabel("Trading Days Relative to Event Date (t=0)")
                         ax2.set_ylabel("Green Score (%)")
-                        ax2.legend()
+                        ax2.legend(loc="upper left")
 
                         plt.tight_layout()
                         st.pyplot(fig)
-            else:
-                st.warning(f"Could not retrieve ticker data for {target_ticker}. Please check connection or ticker symbol.")
+
         except Exception as e:
-            st.error(f"Error fetching live market data: {e}")
+            st.error(f"Error executing real-data analysis: {e}")
 
 # ==============================================================================
 # MODE 3: CUSTOM CSV DATA INGESTION
