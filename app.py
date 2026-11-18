@@ -367,10 +367,10 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
                         st.subheader(f"🤝 Fundamental KNN Matched Twin Portfolio (K={len(twin_tickers)})")
                         col_a, col_b = st.columns(2)
                         with col_a:
-                            st.markdown(**Target Included Stock Fundamentals:**)
+                            st.markdown("**Target Included Stock Fundamentals:**")
                             st.dataframe(metrics_df.loc[[target_ticker]], use_container_width=True)
                         with col_b:
-                            st.markdown(**Matched Counterfactual Twin Stocks:**)
+                            st.markdown("**Matched Counterfactual Twin Stocks:**")
                             st.dataframe(peer_feats.loc[twin_tickers], use_container_width=True)
 
                         # --- Event Window Index Alignment ---
