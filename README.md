@@ -1,101 +1,80 @@
-# The Rational Coward — Market Structure Lab & Simulation Suite
+# The Rational Coward — Market Structure Lab & Research Program
 
-An open-source research and agent-based simulation suite examining how mechanical index demand, benchmark-linked flow pressure, and agency frictions impact market structure, active risk allocation, and patient fundamental price discovery.
+An open-source simulation and empirical research toolkit exploring **how benchmark pressures, passive indexing, and agency constraints alter active risk-taking and asset price discovery**.
 
-Based on **"The Rational Coward Research Program"** and **"Further Research Addendum"** (Nov 2026), incorporating empirical frameworks from Green's hypothesis and the **Market Structure Lab**.
-
----
-
-## 📌 Project Overview
-
-As benchmark-linked assets grow and commercial penalties for benchmark deviation increase, established managers may rationally accept less active risk. Meanwhile, new entrants facing high minimum viable scale may pursue volatile, attention-generating strategies. 
-
-This repository provides an end-to-end framework to simulate and empirically evaluate:
-1. **Agent-Based Market Structure Dynamics:** 120 heterogeneous incumbent asset managers vs. 100 prospective entrants under flow pressure, informed arbitrage capacity limits, and corporate share supply responses.
-2. **Green Score & Twin Matching:** K-Nearest Neighbors (KNN) fundamental twin matching around index inclusion/deletion event windows to isolate mechanical demand shocks from underlying business fundamentals.
-3. **No-Trade Active Share Drift:** Isolating the mechanical erosion of Active Share driven by rising top-10 benchmark concentration.
-4. **Multi-Asset TDF Glidepath Spillovers:** 60-period cross-asset spillover trajectories across Large-Cap Equities, Small-Cap Equities, and Fixed Income under PPA 2006 QDIA target-date fund default allocations.
+Based on **The Rational Coward Research Program** & **Further Research Addendum** (Nov 2026).
 
 ---
 
-## 📂 Repository Layout
+## 📌 Executive Summary
 
-```
-.
-├── app.py                                # Streamlit interactive web application
-├── rational_coward_further_research-v3.ipynb  # Full research notebook (Google Colab ready)
-├── requirements.txt                      # Dependencies for Streamlit & Colab
-└── README.md                             # Project documentation & reproduction guide
-```
+Modern financial markets have experienced a structural shift toward benchmark-linked and passive investing. This repository provides computational tools to analyze, test, and falsify two core theoretical propositions:
+
+1. **Incumbent Risk Aversion & Entrant Polarization**: Established asset managers facing franchise-value loss rationally contract tracking error as passive flows increase. Conversely, prospective entrants facing high viability thresholds pursue volatile, attention-generating strategies, leading to risk polarization.
+2. **Passive Flow Price Impact & Corporate Supply Inelasticity**: Mechanical benchmark demand drives valuation wedges ({target} - R_{twin}$) around index inclusion/deletion events (Green's Hypothesis). The magnitude of this distortion depends on informed arbitrage capacity and corporate share issuance/buyback elasticity (\gamma_{corp}).
 
 ---
 
-## 🚀 Quickstart
+## 🛠️ Repository Architecture & Deliverables
 
-### 1. Run Locally
 
-```bash
-# Clone repository and navigate to folder
-cd market-structure-lab
 
-# Install dependencies
-pip install -r requirements.txt
+### 1.  — Dual-Mode Streamlit Web App
+The interactive application features two top-level operating modes:
 
-# Launch Streamlit app
-streamlit run app.py
-```
+* **🧪 Theoretical Simulation Engine**:
+  * **Module 1 (Agent-Based Simulation)**: Models 120 heterogeneous incumbent managers and 100 prospective entrants under benchmark flow pressure (\lambda_{passive}), corporate supply elasticity (\gamma_{corp}), expanded entrant volatility grids (up to 70%), and failure penalties.
+  * **Module 2 (Active Share & Concentration Drift)**: Models mechanical active share erosion vs. top-10 benchmark concentration ({10}$).
+  * **Module 3 (Multi-Asset Glidepath Extension)**: Models Target-Date Fund (TDF) cross-asset spillovers across Large-Cap Equities, Small-Cap Equities, and Fixed Income.
+* **📊 Empirical Real-Data Laboratory**:
+  * **Live  Integration**: Pulls live historical market data for historical S&P 500 inclusion events (**Tesla 2020**, **Palantir 2024**, **Super Micro 2024**, **Deckers Outdoor 2024**, or custom tickers).
+  * **KNN Fundamental Twin Matcher**: Identifies candidate peer stocks matching pre-event risk profiles.
+  * **Green Score Event Study**: Calculates Cumulative Abnormal Returns (CAR) 30$ days around inclusion dates to measure mechanical index demand impact.
+* **📁 Custom CSV Data Ingestion**: Drag-and-drop interface for proprietary fund holdings or institutional constituent datasets.
 
-### 2. Run in Google Colab
-
-1. Open Google Colab.
-2. Select Upload and upload `rational_coward_further_research-v3.ipynb`.
-3. Execute Cell 1 to initialize the environment and run all four simulation modules sequentially.
-
-### 3. Deploy to Streamlit Community Cloud
-
-1. Push this repository to your code host.
-2. Sign in to Streamlit Community Cloud.
-3. Connect your repository and set `app.py` as the main entry point.
+### 2.  — Google Colab Notebook
+A self-contained Python notebook designed for Google Colab, containing all core simulation classes, mathematical formulations, KNN twin algorithms, and plot generators.
 
 ---
 
-## 🔬 Core Simulation Modules
+## 🚀 Quickstart & Deployment
 
-### Module 1: Agent-Based Market Simulation
-- **Incumbent Optimization:** Models tracking error decisions of 120 incumbent asset managers protecting franchise values against benchmark pressure.
-- **Entrant Grid Search:** Expands the entrant volatility risk grid up to 70% under performance-contingent capital-raising hurdles and failure penalties.
-- **Corporate Supply Response:** Incorporates equity issuance and buyback elasticity to evaluate market elasticity.
+### Running Locally (Streamlit)
 
-### Module 2: Market Structure Lab (Green Score)
-- **Twin Matcher:** Uses normalized KNN matching (K=3) across Market Cap, P/E Ratio, Revenue Growth, and Volatility.
-- **Green Score Calculation:** Green Score = CAR_target - CAR_twin
+1. Clone this repository or download the files.
+2. Install dependencies:
+   
+3. Launch the Streamlit dashboard:
+   
 
-### Module 3: Active Share Drift Counterfactual
-- Simulates historical top-10 concentration trajectory.
-- Disentangles mechanical passive holdings drift from active portfolio manager rebalancing choices.
+### Running in Google Colab
 
-### Module 4: Multi-Asset Glidepath Extension
-- Simulates TDF glidepath allocations (55% / 15% / 30%).
-- Models cross-asset spillover effects and price distortion wedges across Large-Cap, Small-Cap, and Bond markets.
+1. Download  from the Studio panel.
+2. Upload the file to [Google Colab](https://colab.research.google.com/).
+3. Execute Cell 1 to initialize dependencies (, , , , ).
 
----
+### Deploying to Streamlit Community Cloud
 
-## 🎯 Disconfirming & Falsification Standards
-
-Per Section D of the Further Research Addendum, three key findings would disconfirm the core theoretical claims:
-1. **No active component remaining** after controlling for mechanical top-10 concentration drift.
-2. **Absence of an enterprise/distribution exposure gradient** among institutional managers.
-3. **Sufficiently elastic informed capital and corporate share supply** to quickly extinguish persistent valuation wedges following benchmark demand shocks.
+1. Create a public GitHub repository containing , , and .
+2. Connect your repo to Streamlit Community Cloud.
+3. Set  as the entry point and deploy.
 
 ---
 
-## 📚 References & Citation
+## 🔬 Disconfirming Criteria & Falsification Standards
 
-- Cremers and Petajisto (2009), *How Active Is Your Fund Manager?*, Review of Financial Studies.
-- Grossman and Stiglitz (1980), *On the Impossibility of Informationally Efficient Markets*, AER.
-- Shleifer and Vishny (1997), *The Limits of Arbitrage*, Journal of Finance.
-- Greenwood and Sammon (2025), *The Disappearing Index Effect*, Journal of Finance.
-- Haddad, Huebner and Loualiche (2025), *How Competitive Is the Stock Market?*, AER.
+Per Section D of the Addendum, this research program provides explicit disconfirming standards. Key findings that would falsify or bound the theoretical model include:
+
+1. **Active Share Decomposition Null**: Absence of a material manager-choice component after controlling for mechanical {10}$ concentration drift.
+2. **Distribution Exposure Gradient Failure**: Lack of differential tracking error contraction across asset managers grouped by enterprise/plan-distribution exposure.
+3. **Corporate & Arbitrage Neutralization**: Empirical evidence showing corporate share supply (\gamma_{corp}) and informed arbitrage entry respond sufficiently to neutralize persistent valuation wedges post-index inclusion.
 
 ---
-*Open for replication, falsification, and extension.*
+
+## 📚 Selected References
+
+* **Cremers & Petajisto (2009)** — *How Active Is Your Fund Manager?*, Review of Financial Studies.
+* **Shleifer & Vishny (1997)** — *The Limits of Arbitrage*, Journal of Finance.
+* **Grossman & Stiglitz (1980)** — *On the Impossibility of Informationally Efficient Markets*, American Economic Review.
+* **Greenwood & Sammon (2025)** — *The Disappearing Index Effect*, Journal of Finance.
+* **Coles, Heath, & Ringgenberg (2022)** — *On Index Investing*, Journal of Financial Economics.
