@@ -230,14 +230,14 @@ elif module_choice == "3. Active Share & Concentration Drift":
     })
 
     fig, ax1 = plt.subplots(figsize=(10, 4))
-    color = 'tab::blue'
+    color = 'tab:blue'
     ax1.set_xlabel('Year')
     ax1.set_ylabel('Top-10 Concentration (C10)', color=color)
     ax1.plot(years, c10_series, color=color, marker='o', linewidth=2, label="C10 Concentration")
     ax1.tick_params(axis='y', labelcolor=color)
 
     ax2 = ax1.twinx()
-    color = 'tab::red'
+    color = 'tab:red'
     ax2.set_ylabel('Active Share (%)', color=color)
     ax2.plot(years, active_share_actual, color='crimson', linestyle='-', label='Observed Active Share')
     ax2.plot(years, active_share_notrade, color='orange', linestyle='--', label='No-Trade Mechanical Drift')
