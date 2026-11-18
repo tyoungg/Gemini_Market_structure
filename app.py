@@ -298,7 +298,7 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
             else:
                 prices = raw_data
 
-            # Use forward/backward fill per series to avoid dropping all dates globally
+            # Forward and backward fill per series to prevent global row dropping
             prices = prices.ffill().bfill()
 
             if target_ticker in prices.columns:
@@ -319,9 +319,11 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
                     if t in prices.columns:
                         try:
                             t_info = yf.Ticker(t).info
-                            mcap = t_info.get("marketCap", 1e10)
-                            pe = t_info.get("trailingPE", 25.0)
-                            if pe is None or np.isnan(pe):
+                            mcap = t_info.get("marketCap", 1e10) if isinstance(t_info, dict) else 1e10
+                            pe = t_info.get("trailingPE", 25.0) if isinstance(t_info, dict) else 25.0
+                            if mcap is None or not isinstance(mcap, (int, float)) or np.isnan(mcap) or mcap <= 0:
+                                mcap = 1e10
+                            if pe is None or not isinstance(pe, (int, float)) or np.isnan(pe) or pe <= 0:
                                 pe = 25.0
                         except Exception:
                             mcap = 1e10
@@ -329,6 +331,10 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
                         
                         vol = volatilities.get(t, 0.30)
                         ret = mean_returns.get(t, 0.10)
+                        if pd.isna(vol) or np.isinf(vol):
+                            vol = 0.30
+                        if pd.isna(ret) or np.isinf(ret):
+                            ret = 0.10
 
                         feature_data.append({
                             "Ticker": t,
@@ -340,71 +346,83 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
 
                 metrics_df = pd.DataFrame(feature_data).set_index("Ticker")
                 
+                # Replace any Inf/-Inf and fill any remaining NaNs with column medians
+                metrics_df = metrics_df.replace([np.inf, -np.inf], np.nan)
+                for col in metrics_df.columns:
+                    if metrics_df[col].isnull().any():
+                        col_median = metrics_df[col].median()
+                        if pd.isna(col_median):
+                            col_median = 0.0
+                        metrics_df[col] = metrics_df[col].fillna(col_median)
+
                 if target_ticker in metrics_df.index:
                     target_feat = metrics_df.loc[[target_ticker]]
                     peer_feats = metrics_df.drop(index=[target_ticker])
 
-                    # Standardize features using StandardScaler
-                    scaler = StandardScaler()
-                    peer_scaled = scaler.fit_transform(peer_feats)
-                    target_scaled = scaler.transform(target_feat)
+                    if len(peer_feats) > 0:
+                        # Standardize features using StandardScaler
+                        scaler = StandardScaler()
+                        peer_scaled = scaler.fit_transform(peer_feats)
+                        target_scaled = scaler.transform(target_feat)
 
-                    n_k = min(k_neighbors, len(peer_feats))
-                    knn = NearestNeighbors(n_neighbors=n_k)
-                    knn.fit(peer_scaled)
-                    distances, indices = knn.kneighbors(target_scaled)
+                        n_k = min(k_neighbors, len(peer_feats))
+                        knn = NearestNeighbors(n_neighbors=n_k)
+                        knn.fit(peer_scaled)
+                        distances, indices = knn.kneighbors(target_scaled)
 
-                    twin_tickers = peer_feats.iloc[indices[0]].index.tolist()
+                        twin_tickers = peer_feats.iloc[indices[0]].index.tolist()
 
-                    st.subheader(f"🤝 Fundamental KNN Matched Twin Portfolio (K={len(twin_tickers)})")
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        st.markdown("**Target Included Stock Fundamentals:**")
-                        st.dataframe(metrics_df.loc[[target_ticker]], use_container_width=True)
-                    with col_b:
-                        st.markdown("**Matched Counterfactual Twin Stocks:**")
-                        st.dataframe(peer_feats.loc[twin_tickers], use_container_width=True)
+                        st.subheader(f"🤝 Fundamental KNN Matched Twin Portfolio (K={len(twin_tickers)})")
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            st.markdown("**Target Included Stock Fundamentals:**")
+                            st.dataframe(metrics_df.loc[[target_ticker]], use_container_width=True)
+                        with col_b:
+                            st.markdown("**Matched Counterfactual Twin Stocks:**")
+                            st.dataframe(peer_feats.loc[twin_tickers], use_container_width=True)
 
-                    # Event Window Index Alignment
-                    target_dates = target_prices.index
-                    nearest_idx_pos = target_dates.get_indexer([event_dt], method='nearest')[0]
-                    
-                    start_pos = max(0, nearest_idx_pos - pre_days)
-                    end_pos = min(len(target_prices), nearest_idx_pos + post_days + 1)
+                        # Event Window Index Alignment
+                        target_dates = target_prices.index
+                        nearest_idx_pos = target_dates.get_indexer([event_dt], method='nearest')[0]
+                        
+                        start_pos = max(0, nearest_idx_pos - pre_days)
+                        end_pos = min(len(target_prices), nearest_idx_pos + post_days + 1)
 
-                    target_window = target_prices.iloc[start_pos:end_pos]
-                    rel_days = np.arange(start_pos - nearest_idx_pos, end_pos - nearest_idx_pos)
+                        target_window = target_prices.iloc[start_pos:end_pos]
+                        rel_days = np.arange(start_pos - nearest_idx_pos, end_pos - nearest_idx_pos)
 
-                    # Cumulative Returns indexed to window start
-                    target_norm = (target_window / target_window.iloc[0] - 1.0) * 100.0
+                        # Cumulative Returns indexed to window start
+                        target_norm = (target_window / target_window.iloc[0] - 1.0) * 100.0
 
-                    twin_prices_window = peer_prices[twin_tickers].iloc[start_pos:end_pos]
-                    twin_avg_window = twin_prices_window.mean(axis=1)
-                    twin_norm = (twin_avg_window / twin_avg_window.iloc[0] - 1.0) * 100.0
+                        twin_prices_window = peer_prices[twin_tickers].iloc[start_pos:end_pos]
+                        twin_avg_window = twin_prices_window.mean(axis=1)
+                        twin_norm = (twin_avg_window / twin_avg_window.iloc[0] - 1.0) * 100.0
 
-                    green_score_series = target_norm - twin_norm
+                        green_score_series = target_norm - twin_norm
 
-                    # Visualization
-                    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
+                        # Event Study Visualization
+                        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
 
-                    ax1.plot(rel_days, target_norm.values, label=f"Target Stock ({target_ticker})", color="darkgreen", lw=2.5)
-                    ax1.plot(rel_days, twin_norm.values, label=f"KNN Twin Portfolio ({', '.join(twin_tickers)})", color="gray", linestyle="--", lw=2)
-                    ax1.axvline(0, color="red", linestyle=":", lw=1.5, label="Inclusion Event (t=0)")
-                    ax1.set_title(f"Real Market Event Study: {target_ticker} Index Inclusion ({event_date_str})")
-                    ax1.set_ylabel("Cumulative Return (%)")
-                    ax1.legend()
+                        ax1.plot(rel_days, target_norm.values, label=f"Target Stock ({target_ticker})", color="darkgreen", lw=2.5)
+                        ax1.plot(rel_days, twin_norm.values, label=f"KNN Twin Portfolio ({', '.join(twin_tickers)})", color="gray", linestyle="--", lw=2)
+                        ax1.axvline(0, color="red", linestyle=":", lw=1.5, label="Inclusion Event (t=0)")
+                        ax1.set_title(f"Real Market Event Study: {target_ticker} Index Inclusion ({event_date_str})")
+                        ax1.set_ylabel("Cumulative Return (%)")
+                        ax1.legend()
 
-                    ax2.fill_between(rel_days, green_score_series.values, 0, where=(green_score_series.values >= 0), color="green", alpha=0.3, label="Positive Green Score (Inclusion Premium)")
-                    ax2.fill_between(rel_days, green_score_series.values, 0, where=(green_score_series.values < 0), color="red", alpha=0.3, label="Negative Green Score")
-                    ax2.plot(rel_days, green_score_series.values, color="darkgreen", lw=1.5)
-                    ax2.axvline(0, color="red", linestyle=":", lw=1.5)
-                    ax2.set_title("Empirical Green Score (Abnormal Price Distortion = Target CAR - Twin CAR)")
-                    ax2.set_xlabel("Trading Days Relative to Inclusion (t=0)")
-                    ax2.set_ylabel("Green Score (%)")
-                    ax2.legend()
+                        ax2.fill_between(rel_days, green_score_series.values, 0, where=(green_score_series.values >= 0), color="green", alpha=0.3, label="Positive Green Score (Inclusion Premium)")
+                        ax2.fill_between(rel_days, green_score_series.values, 0, where=(green_score_series.values < 0), color="red", alpha=0.3, label="Negative Green Score")
+                        ax2.plot(rel_days, green_score_series.values, color="darkgreen", lw=1.5)
+                        ax2.axvline(0, color="red", linestyle=":", lw=1.5)
+                        ax2.set_title("Empirical Green Score (Abnormal Price Distortion = Target CAR - Twin CAR)")
+                        ax2.set_xlabel("Trading Days Relative to Inclusion (t=0)")
+                        ax2.set_ylabel("Green Score (%)")
+                        ax2.legend()
 
-                    plt.tight_layout()
-                    st.pyplot(fig)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                    else:
+                        st.warning("No valid peer stocks available for KNN matching.")
             else:
                 st.warning(f"Could not retrieve ticker data for {target_ticker}. Please check ticker symbol or connection.")
         except Exception as e:
