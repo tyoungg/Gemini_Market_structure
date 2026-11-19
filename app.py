@@ -281,6 +281,9 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
         "Palantir (PLTR) — S&P 500 Inclusion (Sep 2024)": {
             "ticker": "PLTR", "date": "2024-09-23", "peers": ["SNOW", "PATH", "DDOG", "AI", "MDB"]
         },
+        "⚔️ Multi-Event 365-Day Study: TSLA (2020) vs. PLTR (2024)": {
+            "ticker": "TSLA", "date": "2020-12-21", "peers": ["F", "GM", "TM", "SNOW", "PATH"]
+        },
         "Super Micro (SMCI) — S&P 500 Inclusion (Mar 2024)": {
             "ticker": "SMCI", "date": "2024-03-18", "peers": ["DELL", "HPE", "NVDA", "WDC", "STX"]
         },
@@ -427,7 +430,19 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
 
                         twin_tickers = peer_feats.iloc[indices[0]].index.tolist()
 
-                        st.subheader(f"🤝 Fundamental KNN Matched Twin Portfolio (K={len(twin_tickers)})")
+                        if event_choice == "⚔️ Multi-Event 365-Day Study: TSLA (2020) vs. PLTR (2024)":
+                            st.subheader("⚔️ Side-by-Side 365-Day Empirical Event Study: TSLA (2020) vs. PLTR (2024)")
+                            st.markdown("""
+                            Compares **Tesla's mega-cap flow shock** (Dec 2020) against **Palantir's AI momentum-reinforced inclusion** (Sep 2024) over a 365-day trading horizon.
+                            """)
+                            if os.path.exists("/workspace/out/tsla_vs_pltr_365day_comparison.png"):
+                                st.image("/workspace/out/tsla_vs_pltr_365day_comparison.png", caption="365-Day Green Score Decay: Flow Shock (TSLA) vs. Fundamental Offset (PLTR)", use_column_width=True)
+                            if os.path.exists("/workspace/out/tsla_vs_pltr_365day_comparison.csv"):
+                                df_comp = pd.read_csv("/workspace/out/tsla_vs_pltr_365day_comparison.csv")
+                                st.subheader("📊 365-Day Empirical Green Score Matrix")
+                                st.dataframe(df_comp, use_container_width=True)
+                        else:
+                            st.subheader(f"🤝 Fundamental KNN Matched Twin Portfolio (K={len(twin_tickers)})")
                         col_a, col_b = st.columns(2)
                         with col_a:
                             st.markdown("**Target Included Stock Fundamentals:**")
