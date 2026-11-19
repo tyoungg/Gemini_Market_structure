@@ -7,6 +7,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 import yfinance as yf
 from datetime import datetime, timedelta
+import os
 
 # Set page configuration
 st.set_page_config(
@@ -219,25 +220,15 @@ if app_mode == "🧪 Theoretical Simulation Engine":
         gamma_small_input = st.sidebar.slider("Small-Cap Supply Response (γ_small)", 0.01, 0.30, 0.06, 0.01)
         gamma_bond_input = st.sidebar.slider("Bond Market Supply Response (γ_bond)", 0.01, 0.50, 0.22, 0.01)
 
-        # Generate quarter series
         quarters = [f"{y}-Q{q}" for y in range(2015, 2026) for q in range(1, 5)]
         np.random.seed(42)
         n_q = len(quarters)
 
         p_intensity = np.linspace(0.20, 0.55, n_q)
         
-        # Calculate wedges based on input elasticities
         w_lc = (p_intensity * 22.0) / (1.0 + 8.0 * gamma_large_input) + np.random.normal(0, 0.2, n_q)
         w_sc = (p_intensity * 30.0) / (1.0 + 8.0 * gamma_small_input) + np.random.normal(0, 0.3, n_q)
         w_fi = (p_intensity * 12.0) / (1.0 + 8.0 * gamma_bond_input) + np.random.normal(0, 0.1, n_q)
-
-        df_cs_sim = pd.DataFrame({
-            "Quarter": quarters,
-            "Passive_Intensity": p_intensity,
-            "Large_Cap_Wedge_%": w_lc,
-            "Small_Cap_Wedge_%": w_sc,
-            "Fixed_Income_Wedge_%": w_fi
-        })
 
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -272,79 +263,36 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
     *Green's Hypothesis: Price changes around index inclusions are driven by mechanical index demand rather than fundamental updates.*
     """)
 
-    st.sidebar.header("🔍 Real-Data Event Study Settings")
+    st.sidebar.header("🔍 Event Study Settings")
     
-    preset_events = {
-        "Tesla (TSLA) — S&P 500 Inclusion (Dec 2020)": {
-            "ticker": "TSLA", "date": "2020-12-21", "peers": ["F", "GM", "TM", "RACE", "HMC", "STLA"]
-        },
-        "Palantir (PLTR) — S&P 500 Inclusion (Sep 2024)": {
-            "ticker": "PLTR", "date": "2024-09-23", "peers": ["SNOW", "PATH", "DDOG", "AI", "MDB"]
-        },
-        "⚔️ Multi-Event 365-Day Study: TSLA (2020) vs. PLTR (2024)": {
-            "ticker": "TSLA", "date": "2020-12-21", "peers": ["F", "GM", "TM", "SNOW", "PATH"]
-        },
-        "Super Micro (SMCI) — S&P 500 Inclusion (Mar 2024)": {
-            "ticker": "SMCI", "date": "2024-03-18", "peers": ["DELL", "HPE", "NVDA", "WDC", "STX"]
-        },
-        "Deckers Outdoor (DECK) — S&P 500 Inclusion (Mar 2024)": {
-            "ticker": "DECK", "date": "2024-03-18", "peers": ["NKE", "CROX", "SKX", "UAA", "WWW"]
-        },
-        "Kroger (KR) — Retail/Consumer Staples Benchmark": {
-            "ticker": "KR", "date": "2024-03-18", "peers": ["WMT", "TGT", "COST", "ACI", "DG"]
-        },
-        "Custom Event Entry": {
-            "ticker": "CUSTOM", "date": "", "peers": []
-        }
+    study_type = st.sidebar.radio(
+        "Select Event Study Mode:",
+        ["🎯 Single Inclusion Event Study", "⚔️ Compare ANY Two Events (Head-to-Head)"]
+    )
+
+    preset_catalog = {
+        "Tesla (TSLA) — S&P 500 Inclusion (Dec 2020)": {"ticker": "TSLA", "date": "2020-12-21", "peers": ["F", "GM", "TM", "RACE", "HMC", "STLA"]},
+        "Palantir (PLTR) — S&P 500 Inclusion (Sep 2024)": {"ticker": "PLTR", "date": "2024-09-23", "peers": ["SNOW", "PATH", "DDOG", "AI", "MDB"]},
+        "Super Micro (SMCI) — S&P 500 Inclusion (Mar 2024)": {"ticker": "SMCI", "date": "2024-03-18", "peers": ["DELL", "HPE", "NVDA", "WDC", "STX"]},
+        "Deckers Outdoor (DECK) — S&P 500 Inclusion (Mar 2024)": {"ticker": "DECK", "date": "2024-03-18", "peers": ["NKE", "CROX", "SKX", "UAA", "WWW"]},
+        "Kroger (KR) — Retail Benchmark": {"ticker": "KR", "date": "2024-03-18", "peers": ["WMT", "TGT", "COST", "ACI", "DG"]},
+        "Custom Event Entry": {"ticker": "CUSTOM", "date": "2024-01-01", "peers": []}
     }
-
-    event_choice = st.sidebar.selectbox("Select Historical Inclusion Event:", list(preset_events.keys()))
-
-    if event_choice == "Custom Event Entry":
-        target_ticker = st.sidebar.text_input("Target Ticker Symbol:", "KR").upper()
-        event_date_str = st.sidebar.text_input("Inclusion Date (YYYY-MM-DD):", "2024-03-18")
-        
-        # Dynamic default peers based on typed ticker
-        if target_ticker == "KR":
-            default_peers = "WMT, TGT, COST, ACI, DG"
-        elif target_ticker == "DECK":
-            default_peers = "NKE, CROX, SKX, UAA, WWW"
-        elif target_ticker == "PLTR":
-            default_peers = "SNOW, PATH, DDOG, AI, MDB"
-        elif target_ticker == "SMCI":
-            default_peers = "DELL, HPE, NVDA, WDC, STX"
-        elif target_ticker == "TSLA":
-            default_peers = "F, GM, TM, RACE, HMC, STLA"
-        else:
-            default_peers = "WMT, TGT, COST, ACI, DG"
-            
-        peer_tickers_str = st.sidebar.text_input("Candidate Peer Tickers (comma separated):", default_peers)
-        peer_list = [p.strip().upper() for p in peer_tickers_str.split(",") if p.strip()]
-    else:
-        evt = preset_events[event_choice]
-        target_ticker = evt["ticker"]
-        event_date_str = evt["date"]
-        peer_list = evt["peers"]
 
     st.sidebar.subheader("Matching & Event Window")
     k_neighbors = st.sidebar.slider("K Twin Matches", 1, 10, 3)
     pre_days = st.sidebar.slider("Pre-Event Days", 5, 365, 30)
     post_days = st.sidebar.slider("Post-Event Days", 5, 365, 60)
 
-    run_fetch = st.button("🚀 Fetch Real Market Data & Compute Green Score")
-
-    if run_fetch or event_choice != "Custom Event Entry":
+    def fetch_event_green_score(target_ticker, event_date_str, peer_list, k_n, pre_d, post_d):
         try:
             event_dt = datetime.strptime(event_date_str, "%Y-%m-%d")
-            start_dt = event_dt - timedelta(days=pre_days + 30)
-            end_dt = event_dt + timedelta(days=post_days + 30)
-
-            st.info(f"Fetching live market data for **{target_ticker}** and candidate peers ({', '.join(peer_list)}) from `{start_dt.strftime('%Y-%m-%d')}` to `{end_dt.strftime('%Y-%m-%d')}`...")
+            start_dt = event_dt - timedelta(days=pre_d + 30)
+            end_dt = event_dt + timedelta(days=post_d + 30)
 
             tickers_to_pull = list(set([target_ticker] + peer_list))
             raw_data = yf.download(tickers_to_pull, start=start_dt.strftime('%Y-%m-%d'), end=end_dt.strftime('%Y-%m-%d'), progress=False)
 
-            # Safely handle yfinance MultiIndex structures
             if isinstance(raw_data.columns, pd.MultiIndex):
                 top_levels = raw_data.columns.levels[0]
                 if 'Close' in top_levels:
@@ -356,147 +304,244 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
             else:
                 prices = raw_data
 
-            # Forward and backward fill per series to prevent global row dropping
             prices = prices.ffill().bfill()
 
-            if target_ticker in prices.columns:
-                target_prices = prices[target_ticker].dropna()
-                valid_peers = [c for c in peer_list if c in prices.columns and c != target_ticker]
-                peer_prices = prices[valid_peers]
+            if target_ticker not in prices.columns:
+                return None, f"Could not fetch ticker {target_ticker}"
 
-                st.success(f"Successfully retrieved price histories for **{target_ticker}** and {len(valid_peers)} peer stocks over a [{pre_days} pre, {post_days} post] day window!")
+            target_prices = prices[target_ticker].dropna()
+            valid_peers = [c for c in peer_list if c in prices.columns and c != target_ticker]
+            peer_prices = prices[valid_peers]
 
-                # Calculate returns and risk metrics over pre-event baseline
-                daily_returns = prices.pct_change().ffill().bfill()
-                volatilities = daily_returns.std() * np.sqrt(252)
-                mean_returns = daily_returns.mean() * 252
+            daily_returns = prices.pct_change().ffill().bfill()
+            volatilities = daily_returns.std() * np.sqrt(252)
+            mean_returns = daily_returns.mean() * 252
 
-                # Fetch basic fundamental metrics for KNN matching
-                feature_data = []
-                for t in tickers_to_pull:
-                    if t in prices.columns:
-                        try:
-                            t_info = yf.Ticker(t).info
-                            mcap = t_info.get("marketCap", 1e10) if isinstance(t_info, dict) else 1e10
-                            pe = t_info.get("trailingPE", 25.0) if isinstance(t_info, dict) else 25.0
-                            if mcap is None or not isinstance(mcap, (int, float)) or np.isnan(mcap) or mcap <= 0:
-                                mcap = 1e10
-                            if pe is None or not isinstance(pe, (int, float)) or np.isnan(pe) or pe <= 0:
-                                pe = 25.0
-                        except Exception:
+            feature_data = []
+            for t in tickers_to_pull:
+                if t in prices.columns:
+                    try:
+                        t_info = yf.Ticker(t).info
+                        mcap = t_info.get("marketCap", 1e10) if isinstance(t_info, dict) else 1e10
+                        pe = t_info.get("trailingPE", 25.0) if isinstance(t_info, dict) else 25.0
+                        if mcap is None or not isinstance(mcap, (int, float)) or np.isnan(mcap) or mcap <= 0:
                             mcap = 1e10
+                        if pe is None or not isinstance(pe, (int, float)) or np.isnan(pe) or pe <= 0:
                             pe = 25.0
-                        
-                        vol = volatilities.get(t, 0.30)
-                        ret = mean_returns.get(t, 0.10)
-                        if pd.isna(vol) or np.isinf(vol):
-                            vol = 0.30
-                        if pd.isna(ret) or np.isinf(ret):
-                            ret = 0.10
+                    except Exception:
+                        mcap = 1e10
+                        pe = 25.0
+                    
+                    vol = volatilities.get(t, 0.30)
+                    ret = mean_returns.get(t, 0.10)
+                    if pd.isna(vol) or np.isinf(vol): vol = 0.30
+                    if pd.isna(ret) or np.isinf(ret): ret = 0.10
 
-                        feature_data.append({
-                            "Ticker": t,
-                            "Log_MarketCap": np.log(max(mcap, 1e6)),
-                            "PE_Ratio": pe,
-                            "Annualized_Vol": vol,
-                            "Mean_Return": ret
-                        })
+                    feature_data.append({
+                        "Ticker": t,
+                        "Log_MarketCap": np.log(max(mcap, 1e6)),
+                        "PE_Ratio": pe,
+                        "Annualized_Vol": vol,
+                        "Mean_Return": ret
+                    })
 
-                metrics_df = pd.DataFrame(feature_data).set_index("Ticker")
-                
-                # Replace any Inf/-Inf and fill any remaining NaNs with column medians
-                metrics_df = metrics_df.replace([np.inf, -np.inf], np.nan)
-                for col in metrics_df.columns:
-                    if metrics_df[col].isnull().any():
-                        col_median = metrics_df[col].median()
-                        if pd.isna(col_median):
-                            col_median = 0.0
-                        metrics_df[col] = metrics_df[col].fillna(col_median)
+            metrics_df = pd.DataFrame(feature_data).set_index("Ticker").replace([np.inf, -np.inf], np.nan)
+            for col in metrics_df.columns:
+                if metrics_df[col].isnull().any():
+                    col_med = metrics_df[col].median()
+                    metrics_df[col] = metrics_df[col].fillna(col_med if not pd.isna(col_med) else 0.0)
 
-                if target_ticker in metrics_df.index:
-                    target_feat = metrics_df.loc[[target_ticker]]
-                    peer_feats = metrics_df.drop(index=[target_ticker])
+            target_feat = metrics_df.loc[[target_ticker]]
+            peer_feats = metrics_df.drop(index=[target_ticker])
 
-                    if len(peer_feats) > 0:
-                        # Standardize features using StandardScaler
-                        scaler = StandardScaler()
-                        peer_scaled = scaler.fit_transform(peer_feats)
-                        target_scaled = scaler.transform(target_feat)
+            if len(peer_feats) == 0:
+                return None, "No valid peer stocks for KNN matching."
 
-                        n_k = min(k_neighbors, len(peer_feats))
-                        knn = NearestNeighbors(n_neighbors=n_k)
-                        knn.fit(peer_scaled)
-                        distances, indices = knn.kneighbors(target_scaled)
+            scaler = StandardScaler()
+            peer_scaled = scaler.fit_transform(peer_feats)
+            target_scaled = scaler.transform(target_feat)
 
-                        twin_tickers = peer_feats.iloc[indices[0]].index.tolist()
+            n_k = min(k_n, len(peer_feats))
+            knn = NearestNeighbors(n_neighbors=n_k)
+            knn.fit(peer_scaled)
+            distances, indices = knn.kneighbors(target_scaled)
 
-                        if event_choice == "⚔️ Multi-Event 365-Day Study: TSLA (2020) vs. PLTR (2024)":
-                            st.subheader("⚔️ Side-by-Side 365-Day Empirical Event Study: TSLA (2020) vs. PLTR (2024)")
-                            st.markdown("""
-                            Compares **Tesla's mega-cap flow shock** (Dec 2020) against **Palantir's AI momentum-reinforced inclusion** (Sep 2024) over a 365-day trading horizon.
-                            """)
-                            if os.path.exists("/workspace/out/tsla_vs_pltr_365day_comparison.png"):
-                                st.image("/workspace/out/tsla_vs_pltr_365day_comparison.png", caption="365-Day Green Score Decay: Flow Shock (TSLA) vs. Fundamental Offset (PLTR)", use_column_width=True)
-                            if os.path.exists("/workspace/out/tsla_vs_pltr_365day_comparison.csv"):
-                                df_comp = pd.read_csv("/workspace/out/tsla_vs_pltr_365day_comparison.csv")
-                                st.subheader("📊 365-Day Empirical Green Score Matrix")
-                                st.dataframe(df_comp, use_container_width=True)
-                        else:
-                            st.subheader(f"🤝 Fundamental KNN Matched Twin Portfolio (K={len(twin_tickers)})")
-                        col_a, col_b = st.columns(2)
-                        with col_a:
-                            st.markdown("**Target Included Stock Fundamentals:**")
-                            st.dataframe(metrics_df.loc[[target_ticker]], use_container_width=True)
-                        with col_b:
-                            st.markdown("**Matched Counterfactual Twin Stocks:**")
-                            st.dataframe(peer_feats.loc[twin_tickers], use_container_width=True)
+            twin_tickers = peer_feats.iloc[indices[0]].index.tolist()
 
-                        # Event Window Index Alignment
-                        target_dates = target_prices.index
-                        nearest_idx_pos = target_dates.get_indexer([event_dt], method='nearest')[0]
-                        
-                        start_pos = max(0, nearest_idx_pos - pre_days)
-                        end_pos = min(len(target_prices), nearest_idx_pos + post_days + 1)
+            target_dates = target_prices.index
+            nearest_idx_pos = target_dates.get_indexer([event_dt], method='nearest')[0]
+            
+            start_pos = max(0, nearest_idx_pos - pre_d)
+            end_pos = min(len(target_prices), nearest_idx_pos + post_d + 1)
 
-                        target_window = target_prices.iloc[start_pos:end_pos]
-                        rel_days = np.arange(start_pos - nearest_idx_pos, end_pos - nearest_idx_pos)
+            target_window = target_prices.iloc[start_pos:end_pos]
+            rel_days = np.arange(start_pos - nearest_idx_pos, end_pos - nearest_idx_pos)
 
-                        # Cumulative Returns indexed to window start
-                        target_norm = (target_window / target_window.iloc[0] - 1.0) * 100.0
+            target_norm = (target_window / target_window.iloc[0] - 1.0) * 100.0
 
-                        twin_prices_window = peer_prices[twin_tickers].iloc[start_pos:end_pos]
-                        twin_avg_window = twin_prices_window.mean(axis=1)
-                        twin_norm = (twin_avg_window / twin_avg_window.iloc[0] - 1.0) * 100.0
+            twin_prices_window = peer_prices[twin_tickers].iloc[start_pos:end_pos]
+            twin_avg_window = twin_prices_window.mean(axis=1)
+            twin_norm = (twin_avg_window / twin_avg_window.iloc[0] - 1.0) * 100.0
 
-                        green_score_series = target_norm - twin_norm
+            green_score_series = target_norm - twin_norm
 
-                        # Visualization
-                        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
-
-                        ax1.plot(rel_days, target_norm.values, label=f"Target Stock ({target_ticker})", color="darkgreen", lw=2.5)
-                        ax1.plot(rel_days, twin_norm.values, label=f"KNN Twin Portfolio ({', '.join(twin_tickers)})", color="gray", linestyle="--", lw=2)
-                        ax1.axvline(0, color="red", linestyle=":", lw=1.5, label="Inclusion Event (t=0)")
-                        ax1.set_title(f"Real Market Event Study: {target_ticker} Index Inclusion ({event_date_str}) [{pre_days}d Pre / {post_days}d Post]")
-                        ax1.set_ylabel("Cumulative Return (%)")
-                        ax1.legend()
-
-                        ax2.fill_between(rel_days, green_score_series.values, 0, where=(green_score_series.values >= 0), color="green", alpha=0.3, label="Positive Green Score (Inclusion Premium)")
-                        ax2.fill_between(rel_days, green_score_series.values, 0, where=(green_score_series.values < 0), color="red", alpha=0.3, label="Negative Green Score")
-                        ax2.plot(rel_days, green_score_series.values, color="darkgreen", lw=1.5)
-                        ax2.axvline(0, color="red", linestyle=":", lw=1.5)
-                        ax2.set_title("Empirical Green Score (Abnormal Price Distortion = Target CAR - Twin CAR)")
-                        ax2.set_xlabel("Trading Days Relative to Inclusion (t=0)")
-                        ax2.set_ylabel("Green Score (%)")
-                        ax2.legend()
-
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                    else:
-                        st.warning("No valid peer stocks available for KNN matching.")
-            else:
-                st.warning(f"Could not retrieve ticker data for {target_ticker}. Please check ticker symbol or connection.")
+            res_dict = {
+                "rel_days": rel_days,
+                "target_norm": target_norm,
+                "twin_norm": twin_norm,
+                "green_score": green_score_series,
+                "target_ticker": target_ticker,
+                "event_date": event_date_str,
+                "twin_tickers": twin_tickers,
+                "metrics_df": metrics_df,
+                "peer_feats": peer_feats
+            }
+            return res_dict, None
         except Exception as e:
-            st.error(f"Error executing real-data event study: {e}")
+            return None, str(e)
+
+    # --------------------------------------------------------------------------
+    # OPTION A: SINGLE INCLUSION EVENT STUDY
+    # --------------------------------------------------------------------------
+    if study_type == "🎯 Single Inclusion Event Study":
+        event_choice = st.sidebar.selectbox("Select Inclusion Event:", list(preset_catalog.keys()))
+
+        if event_choice == "Custom Event Entry":
+            target_ticker = st.sidebar.text_input("Target Ticker:", "TSLA").upper()
+            event_date_str = st.sidebar.text_input("Inclusion Date (YYYY-MM-DD):", "2020-12-21")
+            peer_tickers_str = st.sidebar.text_input("Peer Tickers (comma separated):", "F, GM, TM, RACE, HMC")
+            peer_list = [p.strip().upper() for p in peer_tickers_str.split(",") if p.strip()]
+        else:
+            evt = preset_catalog[event_choice]
+            target_ticker = evt["ticker"]
+            event_date_str = evt["date"]
+            peer_list = evt["peers"]
+
+        run_single = st.button("🚀 Fetch Data & Compute Single Event Green Score")
+
+        if run_single or event_choice != "Custom Event Entry":
+            res, err = fetch_event_green_score(target_ticker, event_date_str, peer_list, k_neighbors, pre_days, post_days)
+            if err:
+                st.error(f"Error executing study: {err}")
+            else:
+                st.success(f"Successfully calculated Green Score for **{target_ticker}** around {event_date_str}!")
+                
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.markdown("**Target Stock Fundamentals:**")
+                    st.dataframe(res["metrics_df"].loc[[target_ticker]], use_container_width=True)
+                with col_b:
+                    st.markdown(f"**Matched Twin Stocks (K={len(res['twin_tickers'])}):**")
+                    st.dataframe(res["peer_feats"].loc[res["twin_tickers"]], use_container_width=True)
+
+                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
+
+                ax1.plot(res["rel_days"], res["target_norm"].values, label=f"Target ({target_ticker})", color="darkgreen", lw=2.5)
+                ax1.plot(res["rel_days"], res["twin_norm"].values, label=f"Twin Portfolio ({', '.join(res['twin_tickers'])})", color="gray", linestyle="--", lw=2)
+                ax1.axvline(0, color="red", linestyle=":", lw=1.5, label="Inclusion Date (t=0)")
+                ax1.set_title(f"Event Study: {target_ticker} Index Inclusion ({event_date_str})")
+                ax1.set_ylabel("Cumulative Return (%)")
+                ax1.legend()
+
+                ax2.fill_between(res["rel_days"], res["green_score"].values, 0, where=(res["green_score"].values >= 0), color="green", alpha=0.3, label="Positive Green Score (Inclusion Premium)")
+                ax2.fill_between(res["rel_days"], res["green_score"].values, 0, where=(res["green_score"].values < 0), color="red", alpha=0.3, label="Negative Green Score")
+                ax2.plot(res["rel_days"], res["green_score"].values, color="darkgreen", lw=1.5)
+                ax2.axvline(0, color="red", linestyle=":", lw=1.5)
+                ax2.set_title("Empirical Green Score (Target CAR - Twin CAR)")
+                ax2.set_xlabel("Trading Days Relative to Inclusion (t=0)")
+                ax2.set_ylabel("Green Score (%)")
+                ax2.legend()
+
+                plt.tight_layout()
+                st.pyplot(fig)
+
+    # --------------------------------------------------------------------------
+    # OPTION B: DUAL EVENT HEAD-TO-HEAD COMPARISON (ANY 2 STOCKS)
+    # --------------------------------------------------------------------------
+    else:
+        st.sidebar.subheader("⚔️ Select Stock #1")
+        ev1_choice = st.sidebar.selectbox("Stock #1 Preset:", list(preset_catalog.keys()), index=0)
+        if ev1_choice == "Custom Event Entry":
+            t1 = st.sidebar.text_input("Stock #1 Ticker:", "TSLA").upper()
+            d1 = st.sidebar.text_input("Stock #1 Inclusion Date:", "2020-12-21")
+            p1_str = st.sidebar.text_input("Stock #1 Peers:", "F, GM, TM, RACE, HMC")
+            p1 = [p.strip().upper() for p in p1_str.split(",") if p.strip()]
+        else:
+            evt1 = preset_catalog[ev1_choice]
+            t1, d1, p1 = evt1["ticker"], evt1["date"], evt1["peers"]
+
+        st.sidebar.subheader("⚔️ Select Stock #2")
+        ev2_choice = st.sidebar.selectbox("Stock #2 Preset:", list(preset_catalog.keys()), index=1)
+        if ev2_choice == "Custom Event Entry":
+            t2 = st.sidebar.text_input("Stock #2 Ticker:", "PLTR").upper()
+            d2 = st.sidebar.text_input("Stock #2 Inclusion Date:", "2024-09-23")
+            p2_str = st.sidebar.text_input("Stock #2 Peers:", "SNOW, PATH, DDOG, AI, MDB")
+            p2 = [p.strip().upper() for p in p2_str.split(",") if p.strip()]
+        else:
+            evt2 = preset_catalog[ev2_choice]
+            t2, d2, p2 = evt2["ticker"], evt2["date"], evt2["peers"]
+
+        run_dual = st.button("⚔️ Fetch & Compare ANY Two Events Head-to-Head")
+
+        if run_dual or True:
+            res1, err1 = fetch_event_green_score(t1, d1, p1, k_neighbors, pre_days, post_days)
+            res2, err2 = fetch_event_green_score(t2, d2, p2, k_neighbors, pre_days, post_days)
+
+            if err1:
+                st.error(f"Error fetching Stock #1 ({t1}): {err1}")
+            elif err2:
+                st.error(f"Error fetching Stock #2 ({t2}): {err2}")
+            else:
+                st.subheader(f"⚔️ Head-to-Head Comparison: {t1} ({d1}) vs. {t2} ({d2})")
+                st.markdown(f"Comparing **{t1}** (matched against `{', '.join(res1['twin_tickers'])}`) vs **{t2}** (matched against `{', '.join(res2['twin_tickers'])}`).")
+
+                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 8), sharex=True)
+
+                # Plot Cumulative Returns
+                ax1.plot(res1["rel_days"], res1["target_norm"].values, label=f"{t1} ({d1})", color="navy", lw=2.5)
+                ax1.plot(res2["rel_days"], res2["target_norm"].values, label=f"{t2} ({d2})", color="crimson", lw=2.5)
+                ax1.plot(res1["rel_days"], res1["twin_norm"].values, label=f"{t1} Twins", color="navy", linestyle="--", alpha=0.5)
+                ax1.plot(res2["rel_days"], res2["twin_norm"].values, label=f"{t2} Twins", color="crimson", linestyle="--", alpha=0.5)
+                ax1.axvline(0, color="black", linestyle=":", label="Inclusion (t=0)")
+                ax1.set_title(f"Cumulative Return Trajectories: {t1} vs. {t2}")
+                ax1.set_ylabel("Cumulative Return (%)")
+                ax1.legend()
+
+                # Plot Green Scores
+                ax2.plot(res1["rel_days"], res1["green_score"].values, label=f"{t1} Green Score", color="navy", lw=2.5)
+                ax2.plot(res2["rel_days"], res2["green_score"].values, label=f"{t2} Green Score", color="crimson", lw=2.5)
+                ax2.axvline(0, color="black", linestyle=":")
+                ax2.axhline(0, color="gray", linestyle="--", alpha=0.5)
+                ax2.set_title("Empirical Green Score Comparison (CAR_target - CAR_twin)")
+                ax2.set_xlabel("Trading Days Relative to Inclusion (t=0)")
+                ax2.set_ylabel("Green Score (%)")
+                ax2.legend()
+
+                plt.tight_layout()
+                st.pyplot(fig)
+
+                # Summary Comparison Matrix Table
+                def get_val_at_t(rel_days, series, target_t):
+                    idx = np.abs(rel_days - target_t).argmin()
+                    return round(series.iloc[idx], 2)
+
+                comp_data = []
+                for label, r in [(t1, res1), (t2, res2)]:
+                    rd = r["rel_days"]
+                    gs = r["green_score"]
+                    comp_data.append({
+                        "Stock": label,
+                        "Inclusion Date": r["event_date"],
+                        "Peak Green Score (%)": round(gs.max(), 2),
+                        "t=0 Score (%)": get_val_at_t(rd, gs, 0),
+                        "+30d Score (%)": get_val_at_t(rd, gs, 30),
+                        "+90d Score (%)": get_val_at_t(rd, gs, 90),
+                        "+180d Score (%)": get_val_at_t(rd, gs, 180),
+                        "Matched Twins": ", ".join(r["twin_tickers"])
+                    })
+
+                st.subheader("📊 Comparative Green Score Matrix Table")
+                st.dataframe(pd.DataFrame(comp_data), use_container_width=True)
 
 # ==============================================================================
 # MODE 3: CUSTOM CSV DATA INGESTION
@@ -504,64 +549,38 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
 elif app_mode == "📁 Custom CSV Data Ingestion":
     st.header("📁 Custom Data Ingestion & Empirical Analysis")
     st.markdown("""
-    Upload your proprietary or licensed dataset (e.g. CRSP mutual fund holdings, institutional constituent concentration weights, corporate supply elasticity metrics, or custom stock return series).
+    Upload your proprietary or licensed dataset (e.g. CRSP mutual fund holdings, institutional constituent concentration weights, or custom stock return series).
     """)
 
-    st.subheader("💡 Quick-Load Pre-Packaged Benchmark Datasets")
-    col_preset1, col_preset2, col_preset3 = st.columns(3)
-    
+    st.subheader("⚡ Quick-Load Research Project Benchmark Datasets")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        load_cs = st.button("📊 Load Corporate Supply Dataset")
+    with col2:
+        load_c10 = st.button("📈 Load S&P 500 C10 & Active Share")
+    with col3:
+        load_event = st.button("🎯 Load Kroger (KR) Inclusion Event")
+
     preset_df = None
-    preset_name = ""
-    
-    with col_preset1:
-        if st.button("📊 Load Multi-Asset Corporate Supply Dataset"):
-            try:
-                preset_df = pd.read_csv("/workspace/artifacts/corporate_supply_elasticity_multiasset.csv")
-                preset_name = "Multi-Asset Corporate Supply Elasticity Dataset"
-            except Exception:
-                try:
-                    preset_df = pd.read_csv("corporate_supply_elasticity_multiasset.csv")
-                    preset_name = "Multi-Asset Corporate Supply Elasticity Dataset"
-                except Exception as ex:
-                    st.error(f"Could not load pre-packaged dataset: {ex}")
-    
-    with col_preset2:
-        if st.button("📈 Load S&P 500 C10 Active Share History"):
-            try:
-                preset_df = pd.read_csv("/workspace/artifacts/sp500_c10_active_share_historical.csv")
-                preset_name = "S&P 500 C10 Concentration & Active Share History"
-            except Exception:
-                try:
-                    preset_df = pd.read_csv("sp500_c10_active_share_historical.csv")
-                    preset_name = "S&P 500 C10 Concentration & Active Share History"
-                except Exception as ex:
-                    st.error(f"Could not load pre-packaged dataset: {ex}")
+    if load_cs and os.path.exists("/workspace/out/corporate_supply_elasticity_multiasset.csv"):
+        preset_df = pd.read_csv("/workspace/out/corporate_supply_elasticity_multiasset.csv")
+    elif load_c10 and os.path.exists("/workspace/out/sp500_c10_active_share_historical.csv"):
+        preset_df = pd.read_csv("/workspace/out/sp500_c10_active_share_historical.csv")
+    elif load_event and os.path.exists("/workspace/out/index_inclusion_event_sample.csv"):
+        preset_df = pd.read_csv("/workspace/out/index_inclusion_event_sample.csv")
 
-    with col_preset3:
-        if st.button("🎯 Load Inclusion Event Time Series (KR)"):
-            try:
-                preset_df = pd.read_csv("/workspace/artifacts/index_inclusion_event_sample.csv")
-                preset_name = "Index Inclusion Event Sample Time Series (Kroger KR)"
-            except Exception:
-                try:
-                    preset_df = pd.read_csv("index_inclusion_event_sample.csv")
-                    preset_name = "Index Inclusion Event Sample Time Series (Kroger KR)"
-                except Exception as ex:
-                    st.error(f"Could not load pre-packaged dataset: {ex}")
-
-    st.markdown("---")
-    uploaded_file = st.file_uploader("Or Upload Custom CSV Data File", type=["csv"])
+    uploaded_file = st.file_uploader("Or Upload Your Own CSV File", type=["csv"])
 
     user_df = None
-    if uploaded_file is not None:
+    if preset_df is not None:
+        user_df = preset_df
+        st.success("Loaded project benchmark dataset!")
+    elif uploaded_file is not None:
         try:
             user_df = pd.read_csv(uploaded_file)
             st.success("File uploaded successfully!")
         except Exception as e:
-            st.error(f"Error reading CSV file: {e}")
-    elif preset_df is not None:
-        user_df = preset_df
-        st.success(f"Loaded Pre-Packaged Dataset: **{preset_name}**")
+            st.error(f"Error reading CSV: {e}")
 
     if user_df is not None:
         st.subheader("Data Preview")
@@ -583,7 +602,7 @@ elif app_mode == "📁 Custom CSV Data Ingestion":
             ax.set_ylabel(y_col)
             st.pyplot(fig)
     else:
-        st.info("Select one of the pre-packaged dataset buttons above or drag and drop a custom CSV file to inspect data.")
+        st.info("Please drag and drop a CSV file or click one of the preset loader buttons above.")
 
 st.markdown("---")
-st.caption("The Rational Coward Research Program — Dual-Mode Streamlit Web Application")
+st.caption("The Rational Coward Research Program — Dual-Mode Streamlit Web Application (v5.0)")
