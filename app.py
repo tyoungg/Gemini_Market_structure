@@ -45,7 +45,8 @@ if app_mode == "🧪 Theoretical Simulation Engine":
         [
             "1. Agent-Based Market Dynamics",
             "2. Active Share & Concentration Drift",
-            "3. Multi-Asset Glidepath Extension"
+            "3. Multi-Asset Glidepath Extension",
+            "4. Corporate Supply & Multi-Asset Elasticity"
         ]
     )
 
@@ -207,6 +208,60 @@ if app_mode == "🧪 Theoretical Simulation Engine":
         plt.tight_layout()
         st.pyplot(fig)
 
+    elif sim_module == "4. Corporate Supply & Multi-Asset Elasticity":
+        st.header("4. Corporate Supply Response & Multi-Asset Elasticity (γ_corp)")
+        st.markdown("""
+        Evaluates how **Corporate Supply Responses** (Gross Share Buybacks vs. New Share Issuance) dynamically offset or absorb mechanical passive index flow pressures across asset classes.
+        """)
+
+        st.sidebar.subheader("Elasticity Parameters")
+        gamma_large_input = st.sidebar.slider("Large-Cap Supply Response (γ_large)", 0.01, 0.40, 0.15, 0.01)
+        gamma_small_input = st.sidebar.slider("Small-Cap Supply Response (γ_small)", 0.01, 0.30, 0.06, 0.01)
+        gamma_bond_input = st.sidebar.slider("Bond Market Supply Response (γ_bond)", 0.01, 0.50, 0.22, 0.01)
+
+        # Generate quarter series
+        quarters = [f"{y}-Q{q}" for y in range(2015, 2026) for q in range(1, 5)]
+        np.random.seed(42)
+        n_q = len(quarters)
+
+        p_intensity = np.linspace(0.20, 0.55, n_q)
+        
+        # Calculate wedges based on input elasticities
+        w_lc = (p_intensity * 22.0) / (1.0 + 8.0 * gamma_large_input) + np.random.normal(0, 0.2, n_q)
+        w_sc = (p_intensity * 30.0) / (1.0 + 8.0 * gamma_small_input) + np.random.normal(0, 0.3, n_q)
+        w_fi = (p_intensity * 12.0) / (1.0 + 8.0 * gamma_bond_input) + np.random.normal(0, 0.1, n_q)
+
+        df_cs_sim = pd.DataFrame({
+            "Quarter": quarters,
+            "Passive_Intensity": p_intensity,
+            "Large_Cap_Wedge_%": w_lc,
+            "Small_Cap_Wedge_%": w_sc,
+            "Fixed_Income_Wedge_%": w_fi
+        })
+
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.subheader("Valuation Wedge Trajectories Across Asset Classes")
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.plot(quarters[::2], w_lc[::2], label="Large-Cap Equities", color="navy", marker='o')
+            ax.plot(quarters[::2], w_sc[::2], label="Small/Mid-Cap Equities", color="darkgreen", marker='s', linestyle='--')
+            ax.plot(quarters[::2], w_fi[::2], label="Fixed Income Debt", color="purple", marker='^', linestyle=':')
+            ax.set_xticks(quarters[::4])
+            ax.set_xticklabels(quarters[::4], rotation=45)
+            ax.set_ylabel("Valuation Distortion Wedge (%)")
+            ax.legend()
+            st.pyplot(fig)
+
+        with col2:
+            st.subheader("Elasticity Dampening Summary")
+            summary_df = pd.DataFrame({
+                "Asset Class": ["Large-Cap Equities", "Small/Mid-Cap Equities", "Corporate Debt Index"],
+                "Supply Elasticity (γ)": [gamma_large_input, gamma_small_input, gamma_bond_input],
+                "Absorptive Capacity": ["High (Heavy Buybacks)", "Low (Net Issuance/Secondary Offerings)", "Very High (Flexible Debt Issuance)"],
+                "Average Wedge (%)": [round(w_lc.mean(), 2), round(w_sc.mean(), 2), round(w_fi.mean(), 2)]
+            })
+            st.dataframe(summary_df, use_container_width=True)
+
 # ==============================================================================
 # MODE 2: EMPIRICAL REAL-DATA LABORATORY
 # ==============================================================================
@@ -269,17 +324,17 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
         peer_list = evt["peers"]
 
     st.sidebar.subheader("Matching & Event Window")
-    k_neighbors = st.sidebar.slider("K Twin Matches", 1, 5, 3)
-    pre_days = st.sidebar.slider("Pre-Event Days", 5, 30, 15)
-    post_days = st.sidebar.slider("Post-Event Days", 5, 45, 30)
+    k_neighbors = st.sidebar.slider("K Twin Matches", 1, 10, 3)
+    pre_days = st.sidebar.slider("Pre-Event Days", 5, 365, 30)
+    post_days = st.sidebar.slider("Post-Event Days", 5, 365, 60)
 
     run_fetch = st.button("🚀 Fetch Real Market Data & Compute Green Score")
 
     if run_fetch or event_choice != "Custom Event Entry":
         try:
             event_dt = datetime.strptime(event_date_str, "%Y-%m-%d")
-            start_dt = event_dt - timedelta(days=pre_days + 20)
-            end_dt = event_dt + timedelta(days=post_days + 20)
+            start_dt = event_dt - timedelta(days=pre_days + 30)
+            end_dt = event_dt + timedelta(days=post_days + 30)
 
             st.info(f"Fetching live market data for **{target_ticker}** and candidate peers ({', '.join(peer_list)}) from `{start_dt.strftime('%Y-%m-%d')}` to `{end_dt.strftime('%Y-%m-%d')}`...")
 
@@ -306,9 +361,9 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
                 valid_peers = [c for c in peer_list if c in prices.columns and c != target_ticker]
                 peer_prices = prices[valid_peers]
 
-                st.success(f"Successfully retrieved price histories for **{target_ticker}** and {len(valid_peers)} peer stocks!")
+                st.success(f"Successfully retrieved price histories for **{target_ticker}** and {len(valid_peers)} peer stocks over a [{pre_days} pre, {post_days} post] day window!")
 
-                # Calculate returns and risk metrics
+                # Calculate returns and risk metrics over pre-event baseline
                 daily_returns = prices.pct_change().ffill().bfill()
                 volatilities = daily_returns.std() * np.sqrt(252)
                 mean_returns = daily_returns.mean() * 252
@@ -400,13 +455,13 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
 
                         green_score_series = target_norm - twin_norm
 
-                        # Event Study Visualization
+                        # Visualization
                         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
 
                         ax1.plot(rel_days, target_norm.values, label=f"Target Stock ({target_ticker})", color="darkgreen", lw=2.5)
                         ax1.plot(rel_days, twin_norm.values, label=f"KNN Twin Portfolio ({', '.join(twin_tickers)})", color="gray", linestyle="--", lw=2)
                         ax1.axvline(0, color="red", linestyle=":", lw=1.5, label="Inclusion Event (t=0)")
-                        ax1.set_title(f"Real Market Event Study: {target_ticker} Index Inclusion ({event_date_str})")
+                        ax1.set_title(f"Real Market Event Study: {target_ticker} Index Inclusion ({event_date_str}) [{pre_days}d Pre / {post_days}d Post]")
                         ax1.set_ylabel("Cumulative Return (%)")
                         ax1.legend()
 
@@ -434,37 +489,86 @@ elif app_mode == "📊 Empirical Real-Data Laboratory":
 elif app_mode == "📁 Custom CSV Data Ingestion":
     st.header("📁 Custom Data Ingestion & Empirical Analysis")
     st.markdown("""
-    Upload your proprietary or licensed dataset (e.g. CRSP mutual fund holdings, institutional constituent concentration weights, or custom stock return series).
+    Upload your proprietary or licensed dataset (e.g. CRSP mutual fund holdings, institutional constituent concentration weights, corporate supply elasticity metrics, or custom stock return series).
     """)
 
-    uploaded_file = st.file_uploader("Upload CSV Data File", type=["csv"])
+    st.subheader("💡 Quick-Load Pre-Packaged Benchmark Datasets")
+    col_preset1, col_preset2, col_preset3 = st.columns(3)
+    
+    preset_df = None
+    preset_name = ""
+    
+    with col_preset1:
+        if st.button("📊 Load Multi-Asset Corporate Supply Dataset"):
+            try:
+                preset_df = pd.read_csv("/workspace/artifacts/corporate_supply_elasticity_multiasset.csv")
+                preset_name = "Multi-Asset Corporate Supply Elasticity Dataset"
+            except Exception:
+                try:
+                    preset_df = pd.read_csv("corporate_supply_elasticity_multiasset.csv")
+                    preset_name = "Multi-Asset Corporate Supply Elasticity Dataset"
+                except Exception as ex:
+                    st.error(f"Could not load pre-packaged dataset: {ex}")
+    
+    with col_preset2:
+        if st.button("📈 Load S&P 500 C10 Active Share History"):
+            try:
+                preset_df = pd.read_csv("/workspace/artifacts/sp500_c10_active_share_historical.csv")
+                preset_name = "S&P 500 C10 Concentration & Active Share History"
+            except Exception:
+                try:
+                    preset_df = pd.read_csv("sp500_c10_active_share_historical.csv")
+                    preset_name = "S&P 500 C10 Concentration & Active Share History"
+                except Exception as ex:
+                    st.error(f"Could not load pre-packaged dataset: {ex}")
 
+    with col_preset3:
+        if st.button("🎯 Load Inclusion Event Time Series (KR)"):
+            try:
+                preset_df = pd.read_csv("/workspace/artifacts/index_inclusion_event_sample.csv")
+                preset_name = "Index Inclusion Event Sample Time Series (Kroger KR)"
+            except Exception:
+                try:
+                    preset_df = pd.read_csv("index_inclusion_event_sample.csv")
+                    preset_name = "Index Inclusion Event Sample Time Series (Kroger KR)"
+                except Exception as ex:
+                    st.error(f"Could not load pre-packaged dataset: {ex}")
+
+    st.markdown("---")
+    uploaded_file = st.file_uploader("Or Upload Custom CSV Data File", type=["csv"])
+
+    user_df = None
     if uploaded_file is not None:
         try:
             user_df = pd.read_csv(uploaded_file)
             st.success("File uploaded successfully!")
-            st.subheader("Data Preview")
-            st.dataframe(user_df.head(20), use_container_width=True)
-
-            st.subheader("Summary Statistics")
-            st.dataframe(user_df.describe(), use_container_width=True)
-
-            num_cols = user_df.select_dtypes(include=[np.number]).columns.tolist()
-            if len(num_cols) >= 2:
-                st.subheader("Interactive Quick Plotter")
-                x_col = st.selectbox("Select X-axis Column:", user_df.columns, index=0)
-                y_col = st.selectbox("Select Y-axis Column:", num_cols, index=min(1, len(num_cols)-1))
-                
-                fig, ax = plt.subplots(figsize=(10, 4))
-                ax.plot(user_df[x_col], user_df[y_col], marker='o', color='navy')
-                ax.set_title(f"{y_col} vs {x_col}")
-                ax.set_xlabel(x_col)
-                ax.set_ylabel(y_col)
-                st.pyplot(fig)
         except Exception as e:
             st.error(f"Error reading CSV file: {e}")
+    elif preset_df is not None:
+        user_df = preset_df
+        st.success(f"Loaded Pre-Packaged Dataset: **{preset_name}**")
+
+    if user_df is not None:
+        st.subheader("Data Preview")
+        st.dataframe(user_df.head(20), use_container_width=True)
+
+        st.subheader("Summary Statistics")
+        st.dataframe(user_df.describe(), use_container_width=True)
+
+        num_cols = user_df.select_dtypes(include=[np.number]).columns.tolist()
+        if len(num_cols) >= 2:
+            st.subheader("Interactive Quick Plotter")
+            x_col = st.selectbox("Select X-axis Column:", user_df.columns, index=0)
+            y_col = st.selectbox("Select Y-axis Column:", num_cols, index=min(1, len(num_cols)-1))
+            
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.plot(user_df[x_col], user_df[y_col], marker='o', color='navy')
+            ax.set_title(f"{y_col} vs {x_col}")
+            ax.set_xlabel(x_col)
+            ax.set_ylabel(y_col)
+            st.pyplot(fig)
     else:
-        st.info("Please drag and drop a CSV file to inspect custom datasets.")
+        st.info("Select one of the pre-packaged dataset buttons above or drag and drop a custom CSV file to inspect data.")
 
 st.markdown("---")
 st.caption("The Rational Coward Research Program — Dual-Mode Streamlit Web Application")
